@@ -18,6 +18,11 @@
   color: white;
 }
 
+.App-chart {
+  max-height: 800px;
+  max-width: 1200px;
+}
+
 .App-link {
   color: #61dafb;
 }
