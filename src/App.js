@@ -6,7 +6,25 @@ import Amplify, { Auth } from 'aws-amplify';
 import aws_exports from './aws-exports';
 Amplify.configure(aws_exports);
 
+const REGION = 'us-east-2';
+
+Amplify.Storage.configure({
+  AWSS3: {
+    bucket: 'covid-chi-105443-devm',
+    region: REGION
+  }
+});
+
+Amplify.Storage.list('')
+  .then(result => console.log(result))
+  .catch(err => console.log(err));
+
 class App extends Component {
+
+  constructor(props) {
+    super(props);
+  }
+
   render() {
     return (
       <div className="App">
