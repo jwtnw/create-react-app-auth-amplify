@@ -14,6 +14,7 @@ Amplify.Storage.configure({
     // bucket: 'covid-chi-1',
     // devm TEST ENVIRONMENT
     // bucket: 'covid-chi-105443-devm',
+    // Deployed by pushes to master
     // prod ENVIRONMENT 
     bucket: 'covid-chi-1app-prod',
     region: REGION
