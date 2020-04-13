@@ -18,9 +18,30 @@
   color: white;
 }
 
+.App-unverified {
+  font-size: calc(2vmin);
+}
+
+.App-verified {
+  font-size: calc(2vmin);
+  max-width: 600px;
+}
+
+.App-filter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.App-filterInfo {
+  flex-direction: column;
+}
+
 .App-chart {
   max-height: 800px;
   max-width: 1200px;
+  margin: 40px;
 }
 
 .App-link {
@@ -34,4 +55,11 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.basic-single {
+  width: 300px;
+  font-size: calc(1.5vmin);
+  margin: 40px;
+  color: black;
 }
