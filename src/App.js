@@ -137,6 +137,14 @@ class App extends Component {
         })
         .catch(err => console.log(err));
       }
+      if(chartsToLoad.physical_activity) {
+        Amplify.Storage.get(chartsToLoad.physical_activity)
+        .then((result) => {
+          console.log("Received authorized link for chart " + result);
+          this.setState({physicalActivityChartUrl: result})
+        })
+        .catch(err => console.log(err));
+      }
     }
   }
 
@@ -162,6 +170,8 @@ class App extends Component {
         return (
           <div>
             {charts.cough ? <Chart label={label + " Cough"} url={this.state.coughChartUrl} /> : <div></div>} 
+            {charts.heart_rate ? <Chart label={label + " Heart Rate"} url={this.state.heartRateChartUrl} /> : <div></div>} 
+            {charts.physical_activity ? <Chart label={label + " Physical Activity"} url={this.state.physicalActivityChartUrl} /> : <div></div>} 
           </div>
         );
       } else {
