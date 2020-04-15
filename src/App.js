@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import Select from 'react-select';
+import * as moment from 'moment';
 import logo from './logo.svg';
 import './App.css';
 import { withAuthenticator } from 'aws-amplify-react'
@@ -39,6 +40,8 @@ class App extends Component {
 
       coughChartUrl: "",
       heartRateChartUrl: "",
+      physicalActivityChartUrl: "",
+      temperatureChartUrl: "",
     };
 
     this.getUser();
@@ -68,11 +71,13 @@ class App extends Component {
         const possibleCharts = new Map();
         result.forEach(element => {
           // const chartRegex = /patient_id=([a-zA-Z0-9]+)\/gender=[mfo]\/yyyymmdd=(\d{8})\/.*.png/
-          const chartRegex = /([a-zA-Z0-9]+)\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
+          const chartRegex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
           const matches = element.key.match(chartRegex)
           if(matches) {
-            console.log(element.key)
-            const label = matches[1] + " " + matches[3] + "-" + matches[4] + "-20" + matches[2];
+            // MM-DD-YYYY HH:SS 
+            let date = moment("20" + matches[2] + "-" + matches[3] + "-" + matches[4] + " " + matches[5] + ":" + matches[6], "YYYYMMDD HH:mm");
+            date = date.subtract(6, 'hours')
+            const label = matches[1] + " " + date.format('L') + " " + date.format('LT')
             if(matches[8] === 'heart_rate.png') {
               if(possibleCharts.has(label)) {
                 possibleCharts.get(label).heart_rate = element.key;
@@ -91,6 +96,12 @@ class App extends Component {
               } else {
                 possibleCharts.set(label, {physical_activity: element.key});
               }
+            } else if(matches[8] === 'temperature.png') {
+              if(possibleCharts.has(label)) {
+                possibleCharts.get(label).temperature = element.key;
+              } else {
+                possibleCharts.set(label, {temperature: element.key});
+              }
             } else {
               console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + element.key)
             }
@@ -100,7 +111,6 @@ class App extends Component {
         // Create a list of options for patients for a day
         const patientIdOptions = [];
         possibleCharts.forEach((value, key) => {
-          console.log(key)
           patientIdOptions.push({value: key, label: key});
         });
 
@@ -145,6 +155,14 @@ class App extends Component {
         })
         .catch(err => console.log(err));
       }
+      if(chartsToLoad.temperature) {
+        Amplify.Storage.get(chartsToLoad.temperature)
+        .then((result) => {
+          console.log("Received authorized link for chart " + result);
+          this.setState({temperatureChartUrl: result})
+        })
+        .catch(err => console.log(err));
+      }
     }
   }
 
@@ -169,9 +187,10 @@ class App extends Component {
       if(charts) {
         return (
           <div>
-            {charts.cough ? <Chart label={label + " Cough"} url={this.state.coughChartUrl} /> : <div></div>} 
-            {charts.heart_rate ? <Chart label={label + " Heart Rate"} url={this.state.heartRateChartUrl} /> : <div></div>} 
-            {charts.physical_activity ? <Chart label={label + " Physical Activity"} url={this.state.physicalActivityChartUrl} /> : <div></div>} 
+            {charts.cough ? <Chart label={"Cough: " + label} url={this.state.coughChartUrl} /> : <div></div>} 
+            {charts.heart_rate ? <Chart label={"Heart Rate: " + label} url={this.state.heartRateChartUrl} /> : <div></div>} 
+            {charts.physical_activity ? <Chart label={"Physical Activity: " + label} url={this.state.physicalActivityChartUrl} /> : <div></div>} 
+            {charts.temperature ? <Chart label={"Temperature: " + label} url={this.state.temperatureChartUrl} /> : <div></div>} 
           </div>
         );
       } else {
@@ -185,7 +204,8 @@ class App extends Component {
           <div className="App-filter">
             <div className="App-filterInfo">
               <p className="App-verified">Select a chart.</p>
-              <p className="App-verified">Filter by patient id and date. Chart types may include Heart Rate, Cough Count, and Physical Activity.</p>
+              <p className="App-verified">Filter by patient id and date.</p>
+              <p className="App-verified">Chart types may include Heart Rate, Cough Count, Physical Activity, and Temperature.</p>
             </div>
 
             <div className="App-select">
