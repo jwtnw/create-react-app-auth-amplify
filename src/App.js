@@ -258,7 +258,7 @@ class App extends Component {
                   classNamePrefix="select"
                   isDisabled={false}
                   isLoading={this.state.loadingCharts}
-                  isClearable={true}
+                  isClearable={false}
                   isRtl={false}
                   isSearchable={true}
                   name="patientId"
@@ -278,7 +278,7 @@ class App extends Component {
                     classNamePrefix="select"
                     isDisabled={false}
                     isLoading={this.state.loadingCharts}
-                    isClearable={true}
+                    isClearable={false}
                     isRtl={false}
                     isSearchable={true}
                     name="rawH5"
