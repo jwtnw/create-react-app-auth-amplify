@@ -37,6 +37,9 @@ class App extends Component {
       patientIdOptions: [],
       possibleCharts: new Map(),
       selectedCharts: "",
+      rawOptions: [],
+      possibleRaw: new Map(),
+      selectedRaw: "",
 
       coughChartUrl: "",
       heartRateChartUrl: "",
@@ -69,6 +72,7 @@ class App extends Component {
       .then(result => {
         // Find all of the charts for a patient for a day
         const possibleCharts = new Map();
+        const possibleRaw = new Map();
         result.forEach(element => {
           // const chartRegex = /patient_id=([a-zA-Z0-9]+)\/gender=[mfo]\/yyyymmdd=(\d{8})\/.*.png/
           const chartRegex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
@@ -106,6 +110,19 @@ class App extends Component {
               console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + element.key)
             }
           }
+
+          const h5Regex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
+          const h5Matches = element.key.match(h5Regex)
+          if(element.key.endsWith(".h5")) {
+          }
+          if(h5Matches) {
+            // MM-DD-YYYY HH:SS 
+            console.log(h5Matches)
+            let date = moment("20" + h5Matches[2] + "-" + h5Matches[3] + "-" + h5Matches[4] + " " + h5Matches[5] + ":" + h5Matches[6], "YYYYMMDD HH:mm");
+            date = date.subtract(6, 'hours')
+            const label = h5Matches[1] + " " + date.format('L') + " " + date.format('LT');
+            possibleRaw.set(label, {h5: element.key})
+          }
         });
 
         // Create a list of options for patients for a day
@@ -114,12 +131,19 @@ class App extends Component {
           patientIdOptions.push({value: key, label: key});
         });
 
-        this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
+        const rawOptions = [];
+        possibleRaw.forEach((value, key) => {
+          rawOptions.push({value: key, label: key});
+        });
+
+        this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts, rawOptions: rawOptions, possibleRaw: possibleRaw}, () => {
           if(this.state.patientIdOptions.length > 0) {
             console.log(this.state.patientIdOptions[0])
             console.log(this.state.possibleCharts)
             console.log(this.state.possibleCharts.get(this.state.patientIdOptions[0].value))
             this.handleSelectedChartsChange(this.state.patientIdOptions[0])
+            console.log(this.state.rawOptions);
+            this.handleSelectedRawChange(this.state.rawOptions[0])
           }
         });
       })
@@ -166,6 +190,27 @@ class App extends Component {
     }
   }
 
+  handleSelectedRawChange(option) {
+    this.setState({selectedRaw: option.value});
+  }
+
+  handleDownloadRaw(event) {
+    console.log(this.state.possibleRaw.get(this.state.selectedRaw));
+    const key = this.state.possibleRaw.get(this.state.selectedRaw);
+    if(key) {
+      Amplify.Storage.get(key.h5)
+        .then((result) => {
+          console.log(result);
+          let a = document.createElement('a');
+          a.href = result;
+          a.download = this.state.selectedRaw.replace(/ /g,"_").replace(/\//g,"_") + ".h5";
+          a.target = "_blank";
+          a.click();
+        })
+        .catch((error) => console.log(error));
+    }
+  }
+
   render() {
     const UnverifiedApp = () => (
       <div>
@@ -206,23 +251,48 @@ class App extends Component {
               <p className="App-verified">Select a chart.</p>
               <p className="App-verified">Filter by patient id and date.</p>
               <p className="App-verified">Chart types may include Heart Rate, Cough Count, Physical Activity, and Temperature.</p>
+
+              <div className="App-select">
+                <Select
+                  className="basic-single"
+                  classNamePrefix="select"
+                  isDisabled={false}
+                  isLoading={this.state.loadingCharts}
+                  isClearable={true}
+                  isRtl={false}
+                  isSearchable={true}
+                  name="patientId"
+                  options={this.state.patientIdOptions}
+                  value={{label: this.state.selectedCharts}}
+                  onChange={this.handleSelectedChartsChange.bind(this)}
+                />
+              </div>
             </div>
 
-            <div className="App-select">
-              <Select
-                className="basic-single"
-                classNamePrefix="select"
-                isDisabled={false}
-                isLoading={this.state.loadingCharts}
-                isClearable={true}
-                isRtl={false}
-                isSearchable={true}
-                name="patientId"
-                options={this.state.patientIdOptions}
-                value={this.state.selectedCharts}
-                onChange={this.handleSelectedChartsChange.bind(this)}
-              />
+            <div className="App-filterInfo">
+                <p className="App-verified">Select a raw HDF source.</p>
+                <p className="App-verified">Raw data may number in GBs and require minutes/hours to download.</p>
+                <div className="App-select">
+                  <Select
+                    className="basic-single"
+                    classNamePrefix="select"
+                    isDisabled={false}
+                    isLoading={this.state.loadingCharts}
+                    isClearable={true}
+                    isRtl={false}
+                    isSearchable={true}
+                    name="rawH5"
+                    options={this.state.rawOptions}
+                    value={{label: this.state.selectedRaw}}
+                    onChange={this.handleSelectedRawChange.bind(this)}
+                  />
+
+                  <button className="select__control" onClick={this.handleDownloadRaw.bind(this)}>
+                    Download Raw
+                  </button>
+              </div>
             </div>
+
           </div>
 
           <ActiveCharts label={this.state.selectedCharts} charts={this.state.possibleCharts.get(this.state.selectedCharts)} />

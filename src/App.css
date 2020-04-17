@@ -32,16 +32,24 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-evenly;
+  margin: 40px;
+}
+
+.App-select {
+  width: 75%;
+  margin: 0 auto;
+
 }
 
 .App-filterInfo {
   flex-direction: column;
+  margin: 40px;
 }
 
 .App-chart {
   max-height: 800px;
   max-width: 1200px;
-  margin: 40px;
+  margin: 80px;
 }
 
 .App-link {
