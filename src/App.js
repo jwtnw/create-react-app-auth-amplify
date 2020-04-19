@@ -284,6 +284,18 @@ class App extends Component {
       }
     }
 
+    const LoadingBanner = () => {
+      if(this.state.loadingCharts) {
+        return (
+          <p className="App-verified">Loading ...</p>
+        );
+      } else {
+        return (
+          <p className="App-verified">Filter by Patient Id and Date Time to view charts or download data.</p>
+        )
+      }
+    }
+
     const DownloadData = () => {
       if(this.state.selectedPatientId && this.state.selectedDateTime && this.state.h5ContentLength) {
         return (
@@ -295,18 +307,22 @@ class App extends Component {
               </button>
             </div>
           );
-      } else {
+      } else if(this.state.selectedPatientId && this.state.selectedDateTime) {
         return (
             <div>
               <p className="App-verified">Unprocessed HDF data not available.</p>
             </div>
           );
+      } else {
+        return <div />;
       }
     }
 
     const VerifiedApp = () => (
       <div>
         <header className="App-header">
+          <LoadingBanner />
+
           <div className="App-filter">
             <div className="App-filterInfo">
               <p className="App-verified">Select a Patient Id.</p>
