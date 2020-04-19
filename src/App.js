@@ -280,10 +280,10 @@ class App extends Component {
       if(this.state.selectedCharts && this.state.possibleCharts.get(this.state.selectedCharts).h5 && this.state.h5ContentLength) {
         return (
             <div>
-              <p className="App-verified">Download {this.state.h5ContentLength} of unprocessed data (HDF5).</p>
+              <p className="App-verified">Unprocessed data may be downloaded as HDF.</p>
 
-              <button onClick={this.handleDownloadRaw.bind(this)}>
-                Download HDF data
+              <button onClick={this.handleDownloadRaw.bind(this)} style={{fontSize: 18}}>
+                Download {this.state.h5ContentLength} (HDF5)
               </button>
             </div>
           );
