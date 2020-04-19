@@ -44,6 +44,7 @@ class App extends Component {
       possibleCharts: new Map(),
       selectedCharts: "",
 
+      h5ContentLength: null,
       coughChartUrl: "",
       heartRateChartUrl: "",
       physicalActivityChartUrl: "",
@@ -166,80 +167,10 @@ class App extends Component {
 
     const possibleCharts = new Map();
     recursiveList(params, possibleCharts);
-    // Amplify.Storage.list('')
-    //   .then(result => {
-    //     // Find all of the charts for a patient for a day
-    //     const possibleCharts = new Map();
-    //     result.forEach(element => {
-    //       // const chartRegex = /patient_id=([a-zA-Z0-9]+)\/gender=[mfo]\/yyyymmdd=(\d{8})\/.*.png/
-    //       const chartRegex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
-    //       const matches = element.key.match(chartRegex)
-    //       if(matches) {
-    //         // MM-DD-YYYY HH:SS 
-    //         let date = moment("20" + matches[2] + "-" + matches[3] + "-" + matches[4] + " " + matches[5] + ":" + matches[6], "YYYYMMDD HH:mm");
-    //         date = date.subtract(6, 'hours')
-    //         const label = matches[1] + " " + date.format('L') + " " + date.format('LT')
-    //         if(matches[8] === 'heart_rate.png') {
-    //           if(possibleCharts.has(label)) {
-    //             possibleCharts.get(label).heart_rate = element.key;
-    //           } else {
-    //             possibleCharts.set(label, {heart_rate: element.key});
-    //           }
-    //         } else if(matches[8] === 'coughs.png') {
-    //           if(possibleCharts.has(label)) {
-    //             possibleCharts.get(label).cough = element.key;
-    //           } else {
-    //             possibleCharts.set(label, {cough: element.key});
-    //           }
-    //         } else if(matches[8] === 'physical_activity.png') {
-    //           if(possibleCharts.has(label)) {
-    //             possibleCharts.get(label).physical_activity = element.key;
-    //           } else {
-    //             possibleCharts.set(label, {physical_activity: element.key});
-    //           }
-    //         } else if(matches[8] === 'temperature.png') {
-    //           if(possibleCharts.has(label)) {
-    //             possibleCharts.get(label).temperature = element.key;
-    //           } else {
-    //             possibleCharts.set(label, {temperature: element.key});
-    //           }
-    //         } else {
-    //           console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + element.key)
-    //         }
-    //       }
-
-    //       const h5Regex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
-    //       const h5Matches = element.key.match(h5Regex)
-    //       if(h5Matches) {
-    //         // MM-DD-YYYY HH:SS 
-    //         let date = moment("20" + h5Matches[2] + "-" + h5Matches[3] + "-" + h5Matches[4] + " " + h5Matches[5] + ":" + h5Matches[6], "YYYYMMDD HH:mm");
-    //         date = date.subtract(6, 'hours')
-    //         const label = h5Matches[1] + " " + date.format('L') + " " + date.format('LT');
-    //         if(possibleCharts.has(label)) {
-    //           possibleCharts.get(label).h5 = element.key;  
-    //         } else {
-    //           possibleCharts.set(label, {h5: element.key})
-    //         }
-    //       }
-    //     });
-
-    //     // Create a list of options for patients for a day
-    //     const patientIdOptions = [];
-    //     possibleCharts.forEach((value, key) => {
-    //       patientIdOptions.push({value: key, label: key});
-    //     });
-
-    //     this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
-    //       if(this.state.patientIdOptions.length > 0) {
-    //         this.handleSelectedChartsChange(this.state.patientIdOptions[0])
-    //       }
-    //     });
-    //   })
-    //   .catch(err => console.log(err));
   }
 
   handleSelectedChartsChange(option) {
-    this.setState({selectedCharts: option.value});
+    this.setState({selectedCharts: option.value, h5ContentLength: null});
     const chartsToLoad = this.state.possibleCharts.get(option.value);
     if(chartsToLoad) {
       console.log(chartsToLoad)
@@ -275,6 +206,25 @@ class App extends Component {
         })
         .catch(err => console.log(err));
       }
+    }
+
+    if(chartsToLoad.h5) {
+      this.state.s3.headObject({Bucket: BUCKET, Key: "public/" + chartsToLoad.h5}, (err, data) => {
+        if(err) {
+          console.log(err)
+        } else {
+          const contentLengthInBytes = Number(data.ContentLength);
+          if(contentLengthInBytes < 1024) {
+            this.setState({h5ContentLength: data.ContentLength + "B"});
+          } else if(contentLengthInBytes < 1024 * 1024) {
+            this.setState({h5ContentLength: (data.ContentLength / 1024).toFixed(3) + " KB"});
+          } else if(contentLengthInBytes < 1024 * 1024 * 1024) {
+            this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024)).toFixed(3) + " MB"});
+          } else {
+            this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024 * 1024)).toFixed(3) + " GB"});
+          }
+        }
+      });
     }
   }
 
@@ -327,10 +277,10 @@ class App extends Component {
     }
 
     const DownloadData = () => {
-      if(this.state.selectedCharts && this.state.possibleCharts.get(this.state.selectedCharts).h5) {
+      if(this.state.selectedCharts && this.state.possibleCharts.get(this.state.selectedCharts).h5 && this.state.h5ContentLength) {
         return (
             <div>
-              <p className="App-verified">Download unprocessed HDF data.</p>
+              <p className="App-verified">Download {this.state.h5ContentLength} of unprocessed data (HDF5).</p>
 
               <button onClick={this.handleDownloadRaw.bind(this)}>
                 Download HDF data
