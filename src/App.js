@@ -40,6 +40,10 @@ class App extends Component {
       username: "",
       verified: false,
       loadingCharts: true,
+      selectedPatientId: null,
+      selectedDateTime: null,
+      selectDateTimeDisabled: true,
+
       patientIdOptions: [],
       possibleCharts: new Map(),
       selectedCharts: "",
@@ -79,6 +83,16 @@ class App extends Component {
 
     };
 
+    const addOption = (charts, patientId, dateTime) => {
+      if(!charts.has(patientId)) {
+        charts.set(patientId, new Map());
+      }
+      if(!charts.get(patientId).has(dateTime)) {
+        charts.get(patientId).set(dateTime, {});
+      }
+      return charts.get(patientId).get(dateTime);
+    }
+
     const recursiveList = (params, possibleCharts) => {
       console.log(params)
       this.state.s3.listObjectsV2(params, (err, data) => {
@@ -97,53 +111,33 @@ class App extends Component {
             // MM-DD-YYYY HH:SS 
             let date = moment("20" + matches[2] + "-" + matches[3] + "-" + matches[4] + " " + matches[5] + ":" + matches[6], "YYYYMMDD HH:mm");
             date = date.subtract(6, 'hours')
-            const label = matches[1] + " " + date.format('L') + " " + date.format('LT')
+            const patientId = matches[1];
+            const dateTime = date.format('L') + " " + date.format('LT');
             if(matches[8] === 'heart_rate.png') {
-              if(possibleCharts.has(label)) {
-                possibleCharts.get(label).heart_rate = publicKey;
-              } else {
-                possibleCharts.set(label, {heart_rate: publicKey});
-              }
+              addOption(possibleCharts, patientId, dateTime).heart_rate = publicKey;
             } else if(matches[8] === 'coughs.png') {
-              if(possibleCharts.has(label)) {
-                possibleCharts.get(label).cough = publicKey;
-              } else {
-                possibleCharts.set(label, {cough: publicKey});
-              }
+              addOption(possibleCharts, patientId, dateTime).cough = publicKey;
             } else if(matches[8] === 'physical_activity.png') {
-              if(possibleCharts.has(label)) {
-                possibleCharts.get(label).physical_activity = publicKey;
-              } else {
-                possibleCharts.set(label, {physical_activity: publicKey});
-              }
+              addOption(possibleCharts, patientId, dateTime).physical_activity= publicKey;
             } else if(matches[8] === 'temperature.png') {
-              if(possibleCharts.has(label)) {
-                possibleCharts.get(label).temperature = publicKey;
-              } else {
-                possibleCharts.set(label, {temperature: publicKey});
-              }
+              addOption(possibleCharts, patientId, dateTime).temperature= publicKey;
             } else {
               console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + publicKey)
             }
           }
 
-          const h5Regex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
+          const h5Regex = /public\/([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
           const h5Matches = s3Obj.Key.match(h5Regex)
           if(h5Matches) {
             // MM-DD-YYYY HH:SS 
             let date = moment("20" + h5Matches[2] + "-" + h5Matches[3] + "-" + h5Matches[4] + " " + h5Matches[5] + ":" + h5Matches[6], "YYYYMMDD HH:mm");
-            date = date.subtract(6, 'hours')
-            const label = h5Matches[1] + " " + date.format('L') + " " + date.format('LT');
-            if(possibleCharts.has(label)) {
-              possibleCharts.get(label).h5 = publicKey;  
-            } else {
-              possibleCharts.set(label, {h5: publicKey})
-            }
+            date = date.subtract(6, 'hours');
+            const patientId = h5Matches[1];
+            const dateTime = date.format('L') + " " + date.format('LT');
+            addOption(possibleCharts, patientId, dateTime).h5 = publicKey;
           }
         });
 
-
-        console.log(data)
         if(data.IsTruncated) {
           params.ContinuationToken = data.NextContinuationToken;
           recursiveList(params, possibleCharts);
@@ -153,14 +147,9 @@ class App extends Component {
           possibleCharts.forEach((value, key) => {
             patientIdOptions.push({value: key, label: key});
           });
+          patientIdOptions.sort();
 
-          this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
-            if(this.state.patientIdOptions.length > 0) {
-              this.handleSelectedChartsChange(this.state.patientIdOptions[0])
-            } else {
-              console.log("NO PATIENT ID OPTIONS FOUND !!!");
-            }
-          });
+          this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts});
         }
       });
     };
@@ -169,9 +158,29 @@ class App extends Component {
     recursiveList(params, possibleCharts);
   }
 
-  handleSelectedChartsChange(option) {
-    this.setState({selectedCharts: option.value, h5ContentLength: null});
-    const chartsToLoad = this.state.possibleCharts.get(option.value);
+  handleSelectedPatientIdChange(option) {
+    if(option) {
+      const dateTimeOptions = [];
+      this.state.possibleCharts.get(option.value).forEach((value, key) => {
+        dateTimeOptions.push({value: key, label: key});
+      });
+      dateTimeOptions.sort();
+      dateTimeOptions.reverse();
+      this.setState({selectedPatientId: option.value, selectedDateTime: null, selectedCharts: null, dateTimeOptions: dateTimeOptions, selectDateTimeDisabled: false});
+    } else {
+      this.setState({selectedPatientId: null, selectedDateTime: null, selectedCharts: null, dateTimeOptions: [], selectDateTimeDisabled: true});
+    }
+  }
+
+  handleSelectedDateTimeChange(option) {
+    if(!option) {
+      this.setState({selectedCharts: null, selectedDateTime: null, h5ContentLength: null});
+      return;
+    }
+
+    const selectedCharts = this.state.selectedPatientId + " " + option.value;
+    this.setState({selectedCharts: selectedCharts, selectedDateTime: option.value, h5ContentLength: null});
+    const chartsToLoad = this.state.possibleCharts.get(this.state.selectedPatientId).get(option.value);
     if(chartsToLoad) {
       console.log(chartsToLoad)
       if(chartsToLoad.cough) {
@@ -206,34 +215,33 @@ class App extends Component {
         })
         .catch(err => console.log(err));
       }
-    }
 
-    if(chartsToLoad.h5) {
-      this.state.s3.headObject({Bucket: BUCKET, Key: "public/" + chartsToLoad.h5}, (err, data) => {
-        if(err) {
-          console.log(err)
-        } else {
-          const contentLengthInBytes = Number(data.ContentLength);
-          if(contentLengthInBytes < 1024) {
-            this.setState({h5ContentLength: data.ContentLength + "B"});
-          } else if(contentLengthInBytes < 1024 * 1024) {
-            this.setState({h5ContentLength: (data.ContentLength / 1024).toFixed(3) + " KB"});
-          } else if(contentLengthInBytes < 1024 * 1024 * 1024) {
-            this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024)).toFixed(3) + " MB"});
+      if(chartsToLoad.h5) {
+        this.state.s3.headObject({Bucket: BUCKET, Key: "public/" + chartsToLoad.h5}, (err, data) => {
+          if(err) {
+            console.log(err)
           } else {
-            this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024 * 1024)).toFixed(3) + " GB"});
+            const contentLengthInBytes = Number(data.ContentLength);
+            if(contentLengthInBytes < 1024) {
+              this.setState({h5ContentLength: data.ContentLength + "B"});
+            } else if(contentLengthInBytes < 1024 * 1024) {
+              this.setState({h5ContentLength: (data.ContentLength / 1024).toFixed(3) + " KB"});
+            } else if(contentLengthInBytes < 1024 * 1024 * 1024) {
+              this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024)).toFixed(3) + " MB"});
+            } else {
+              this.setState({h5ContentLength: (data.ContentLength / (1024 * 1024 * 1024)).toFixed(3) + " GB"});
+            }
           }
-        }
-      });
+        });
+      }
     }
   }
 
   handleDownloadRaw(event) {
-    const key = this.state.possibleCharts.get(this.state.selectedCharts);
+    const key = this.state.possibleCharts.get(this.state.selectedPatientId).get(this.state.selectedDateTime);
     if(key && key.h5) {
       Amplify.Storage.get(key.h5)
         .then((result) => {
-          console.log(result);
           let a = document.createElement('a');
           a.href = result;
           a.download = this.state.selectedCharts.replace(/ /g,"_").replace(/\//g,"_") + ".h5";
@@ -277,7 +285,7 @@ class App extends Component {
     }
 
     const DownloadData = () => {
-      if(this.state.selectedCharts && this.state.possibleCharts.get(this.state.selectedCharts).h5 && this.state.h5ContentLength) {
+      if(this.state.selectedPatientId && this.state.selectedDateTime && this.state.h5ContentLength) {
         return (
             <div>
               <p className="App-verified">Unprocessed data may be downloaded as HDF.</p>
@@ -301,8 +309,7 @@ class App extends Component {
         <header className="App-header">
           <div className="App-filter">
             <div className="App-filterInfo">
-              <p className="App-verified">Select a chart.</p>
-              <p className="App-verified">Filter by patient id and date.</p>
+              <p className="App-verified">Select a Patient Id.</p>
 
               <div className="App-select">
                 <Select
@@ -315,16 +322,36 @@ class App extends Component {
                   isSearchable={true}
                   name="patientId"
                   options={this.state.patientIdOptions}
-                  value={{label: this.state.selectedCharts}}
-                  onChange={this.handleSelectedChartsChange.bind(this)}
+                  value={{label: this.state.selectedPatientId}}
+                  onChange={this.handleSelectedPatientIdChange.bind(this)}
                 />
               </div>
+            </div>
 
-              <DownloadData />
+            <div className="App-filterInfo">
+              <p className="App-verified">Select a Date and Time.</p>
+
+              <div className="App-select">
+                <Select
+                  className="basic-single"
+                  classNamePrefix="select"
+                  isDisabled={this.state.selectDateTimeDisabled}
+                  isLoading={this.state.loadingCharts}
+                  isClearable={true}
+                  isRtl={false}
+                  isSearchable={true}
+                  name="dateTime"
+                  options={this.state.dateTimeOptions}
+                  value={{label: this.state.selectedDateTime}}
+                  onChange={this.handleSelectedDateTimeChange.bind(this)}
+                />
+              </div>
             </div>
           </div>
 
-          <ActiveCharts label={this.state.selectedCharts} charts={this.state.possibleCharts.get(this.state.selectedCharts)} />
+          <DownloadData />
+
+          <ActiveCharts label={this.state.selectedPatientId + " " + this.state.selectedDateTime} charts={this.state.selectedPatientId && this.state.selectedDateTime ? this.state.possibleCharts.get(this.state.selectedPatientId).get(this.state.selectedDateTime) : null} />
         </header>
      </div>
     );
