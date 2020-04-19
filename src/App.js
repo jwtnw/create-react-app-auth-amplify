@@ -1,23 +1,30 @@
 import React, { Component } from 'react';
 import Select from 'react-select';
 import * as moment from 'moment';
-import logo from './logo.svg';
 import './App.css';
 import { withAuthenticator } from 'aws-amplify-react'
 import Amplify, { Auth } from 'aws-amplify';
 import aws_exports from './aws-exports';
+import AWS from 'aws-sdk';
 Amplify.configure(aws_exports);
 
 const REGION = 'us-east-2';
+const BUCKET = 'covid-chi-1app-prod';
+
+AWS.config.region = REGION;
 
 Amplify.Storage.configure({
   AWSS3: {
+    // client upload bucket synced
     // bucket: 'covid-chi-1',
+
     // devm TEST ENVIRONMENT
     // bucket: 'covid-chi-105443-devm',
-    // Deployed by pushes to master
+
     // prod ENVIRONMENT 
-    bucket: 'covid-chi-1app-prod',
+    // bucket: 'covid-chi-1app-prod',
+
+    bucket: BUCKET,
     region: REGION
   }
 });
@@ -28,8 +35,7 @@ class App extends Component {
     super(props);
 
     this.state = {
-      activeChartLabel: "No chart to display",
-      activeChartUrl: logo,
+      s3: null,
 
       username: "",
       verified: false,
@@ -49,30 +55,43 @@ class App extends Component {
 
   getUser() {
     Auth.currentAuthenticatedUser().then((cognitoUser) => {
-      console.log(cognitoUser)
       const userGroups = cognitoUser.signInUserSession.idToken.payload['cognito:groups'];
       let verified = false;
-      console.log(userGroups)
-      console.log(userGroups.indexOf("Verified"))
       if(userGroups && userGroups.indexOf('Verified') !== -1) {
         verified = true; 
       }
-      console.log(verified)
-      this.setState({username: cognitoUser.username, verified: verified}, () => {
-        this.getCharts();
+
+      Auth.currentCredentials().then((credentials) => {
+        const s3 = new AWS.S3({credentials: Auth.essentialCredentials(credentials)});
+        this.setState({username: cognitoUser.username, verified: verified, s3: s3}, () => {
+          this.getCharts();
+        });
       })
+      .catch((error) => console.log(error));
     });
   }
 
   getCharts() {
-    Amplify.Storage.list('')
-      .then(result => {
-        // Find all of the charts for a patient for a day
-        const possibleCharts = new Map();
-        result.forEach(element => {
+    let params = {
+      Bucket: BUCKET,
+      Prefix: "public/",
+
+    };
+
+    const recursiveList = (params, possibleCharts) => {
+      console.log(params)
+      this.state.s3.listObjectsV2(params, (err, data) => {
+        if(err) {
+          console.log(params);
+          console.log(err);
+          return;
+        }
+
+        data.Contents.forEach((s3Obj) => {
           // const chartRegex = /patient_id=([a-zA-Z0-9]+)\/gender=[mfo]\/yyyymmdd=(\d{8})\/.*.png/
-          const chartRegex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
-          const matches = element.key.match(chartRegex)
+          const chartRegex = /public\/([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
+          const matches = s3Obj.Key.match(chartRegex)
+          const publicKey = s3Obj.Key.substring("public/".length);
           if(matches) {
             // MM-DD-YYYY HH:SS 
             let date = moment("20" + matches[2] + "-" + matches[3] + "-" + matches[4] + " " + matches[5] + ":" + matches[6], "YYYYMMDD HH:mm");
@@ -80,61 +99,143 @@ class App extends Component {
             const label = matches[1] + " " + date.format('L') + " " + date.format('LT')
             if(matches[8] === 'heart_rate.png') {
               if(possibleCharts.has(label)) {
-                possibleCharts.get(label).heart_rate = element.key;
+                possibleCharts.get(label).heart_rate = publicKey;
               } else {
-                possibleCharts.set(label, {heart_rate: element.key});
+                possibleCharts.set(label, {heart_rate: publicKey});
               }
             } else if(matches[8] === 'coughs.png') {
               if(possibleCharts.has(label)) {
-                possibleCharts.get(label).cough = element.key;
+                possibleCharts.get(label).cough = publicKey;
               } else {
-                possibleCharts.set(label, {cough: element.key});
+                possibleCharts.set(label, {cough: publicKey});
               }
             } else if(matches[8] === 'physical_activity.png') {
               if(possibleCharts.has(label)) {
-                possibleCharts.get(label).physical_activity = element.key;
+                possibleCharts.get(label).physical_activity = publicKey;
               } else {
-                possibleCharts.set(label, {physical_activity: element.key});
+                possibleCharts.set(label, {physical_activity: publicKey});
               }
             } else if(matches[8] === 'temperature.png') {
               if(possibleCharts.has(label)) {
-                possibleCharts.get(label).temperature = element.key;
+                possibleCharts.get(label).temperature = publicKey;
               } else {
-                possibleCharts.set(label, {temperature: element.key});
+                possibleCharts.set(label, {temperature: publicKey});
               }
             } else {
-              console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + element.key)
+              console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + publicKey)
             }
           }
 
           const h5Regex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
-          const h5Matches = element.key.match(h5Regex)
+          const h5Matches = s3Obj.Key.match(h5Regex)
           if(h5Matches) {
             // MM-DD-YYYY HH:SS 
             let date = moment("20" + h5Matches[2] + "-" + h5Matches[3] + "-" + h5Matches[4] + " " + h5Matches[5] + ":" + h5Matches[6], "YYYYMMDD HH:mm");
             date = date.subtract(6, 'hours')
             const label = h5Matches[1] + " " + date.format('L') + " " + date.format('LT');
             if(possibleCharts.has(label)) {
-              possibleCharts.get(label).h5 = element.key;  
+              possibleCharts.get(label).h5 = publicKey;  
             } else {
-              possibleCharts.set(label, {h5: element.key})
+              possibleCharts.set(label, {h5: publicKey})
             }
           }
         });
 
-        // Create a list of options for patients for a day
-        const patientIdOptions = [];
-        possibleCharts.forEach((value, key) => {
-          patientIdOptions.push({value: key, label: key});
-        });
 
-        this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
-          if(this.state.patientIdOptions.length > 0) {
-            this.handleSelectedChartsChange(this.state.patientIdOptions[0])
-          }
-        });
-      })
-      .catch(err => console.log(err));
+        console.log(data)
+        if(data.IsTruncated) {
+          params.ContinuationToken = data.NextContinuationToken;
+          recursiveList(params, possibleCharts);
+        } else {
+          // Create a list of options for patients for a day
+          const patientIdOptions = [];
+          possibleCharts.forEach((value, key) => {
+            patientIdOptions.push({value: key, label: key});
+          });
+
+          this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
+            if(this.state.patientIdOptions.length > 0) {
+              this.handleSelectedChartsChange(this.state.patientIdOptions[0])
+            } else {
+              console.log("NO PATIENT ID OPTIONS FOUND !!!");
+            }
+          });
+        }
+      });
+    };
+
+    const possibleCharts = new Map();
+    recursiveList(params, possibleCharts);
+    // Amplify.Storage.list('')
+    //   .then(result => {
+    //     // Find all of the charts for a patient for a day
+    //     const possibleCharts = new Map();
+    //     result.forEach(element => {
+    //       // const chartRegex = /patient_id=([a-zA-Z0-9]+)\/gender=[mfo]\/yyyymmdd=(\d{8})\/.*.png/
+    //       const chartRegex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*.png)/
+    //       const matches = element.key.match(chartRegex)
+    //       if(matches) {
+    //         // MM-DD-YYYY HH:SS 
+    //         let date = moment("20" + matches[2] + "-" + matches[3] + "-" + matches[4] + " " + matches[5] + ":" + matches[6], "YYYYMMDD HH:mm");
+    //         date = date.subtract(6, 'hours')
+    //         const label = matches[1] + " " + date.format('L') + " " + date.format('LT')
+    //         if(matches[8] === 'heart_rate.png') {
+    //           if(possibleCharts.has(label)) {
+    //             possibleCharts.get(label).heart_rate = element.key;
+    //           } else {
+    //             possibleCharts.set(label, {heart_rate: element.key});
+    //           }
+    //         } else if(matches[8] === 'coughs.png') {
+    //           if(possibleCharts.has(label)) {
+    //             possibleCharts.get(label).cough = element.key;
+    //           } else {
+    //             possibleCharts.set(label, {cough: element.key});
+    //           }
+    //         } else if(matches[8] === 'physical_activity.png') {
+    //           if(possibleCharts.has(label)) {
+    //             possibleCharts.get(label).physical_activity = element.key;
+    //           } else {
+    //             possibleCharts.set(label, {physical_activity: element.key});
+    //           }
+    //         } else if(matches[8] === 'temperature.png') {
+    //           if(possibleCharts.has(label)) {
+    //             possibleCharts.get(label).temperature = element.key;
+    //           } else {
+    //             possibleCharts.set(label, {temperature: element.key});
+    //           }
+    //         } else {
+    //           console.log("DON'T KNOW WHAT TO DO WITH " + matches[5] + " " + element.key)
+    //         }
+    //       }
+
+    //       const h5Regex = /([a-zA-Z0-9]+[m|f|M|F])\/sensor_data\/(\d\d)-(\d\d)-(\d\d)-(\d+)_(\d+)_(\d+).*\/(.*)\/raw.h5/
+    //       const h5Matches = element.key.match(h5Regex)
+    //       if(h5Matches) {
+    //         // MM-DD-YYYY HH:SS 
+    //         let date = moment("20" + h5Matches[2] + "-" + h5Matches[3] + "-" + h5Matches[4] + " " + h5Matches[5] + ":" + h5Matches[6], "YYYYMMDD HH:mm");
+    //         date = date.subtract(6, 'hours')
+    //         const label = h5Matches[1] + " " + date.format('L') + " " + date.format('LT');
+    //         if(possibleCharts.has(label)) {
+    //           possibleCharts.get(label).h5 = element.key;  
+    //         } else {
+    //           possibleCharts.set(label, {h5: element.key})
+    //         }
+    //       }
+    //     });
+
+    //     // Create a list of options for patients for a day
+    //     const patientIdOptions = [];
+    //     possibleCharts.forEach((value, key) => {
+    //       patientIdOptions.push({value: key, label: key});
+    //     });
+
+    //     this.setState({loadingCharts: false, patientIdOptions: patientIdOptions, possibleCharts: possibleCharts}, () => {
+    //       if(this.state.patientIdOptions.length > 0) {
+    //         this.handleSelectedChartsChange(this.state.patientIdOptions[0])
+    //       }
+    //     });
+    //   })
+    //   .catch(err => console.log(err));
   }
 
   handleSelectedChartsChange(option) {
